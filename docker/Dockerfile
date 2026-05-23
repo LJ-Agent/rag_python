@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.11-alpine
 
 LABEL maintainer="RAG Team"
 LABEL description="RAG Python AI Service"
@@ -6,25 +6,23 @@ LABEL description="RAG Python AI Service"
 WORKDIR /app
 
 # System dependencies for pypdf / sentence-transformers
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc g++ \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache gcc g++ musl-dev
 
-# Install Python dependencies
-COPY pyproject.toml .
-RUN pip install --no-cache-dir .
-
-# Copy source code
+# Copy source code and config first (needed for setuptools package discovery)
 COPY src/ src/
 COPY config/ config/
 COPY proto/ proto/
 COPY scripts/ scripts/
+COPY pyproject.toml .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir .
 
 # Pre-compile proto files
 RUN python scripts/compile_proto.py
 
 # Non-root user
-RUN useradd -m -s /bin/bash rag && chown -R rag:rag /app
+RUN adduser -D -s /bin/sh rag && chown -R rag:rag /app
 USER rag
 
 EXPOSE 50051 50052
