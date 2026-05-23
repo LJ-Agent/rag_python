@@ -15,7 +15,10 @@ COPY proto/ proto/
 COPY scripts/ scripts/
 COPY pyproject.toml .
 
-# Install Python dependencies
+# Install PyTorch CPU first (from PyTorch wheel index; musl wheels available)
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
+# Install remaining Python dependencies
 RUN pip install --no-cache-dir .
 
 # Pre-compile proto files
