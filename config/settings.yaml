@@ -59,10 +59,10 @@ milvus:
 # 大模型 LLM 配置
 llm:
   provider: "openai"  # openai / local
-  api_key: ""
-  base_url: "https://api.openai.com/v1"
+  api_key: "${LLM_API_KEY:}"
+  base_url: "${LLM_BASE_URL:https://api.openai.com/v1}"
   embedding_model: "text-embedding-3-small"
-  chat_model: "gpt-4o"
+  chat_model: "${LLM_CHAT_MODEL:gpt-4o}"
   local_embedding_model: "BAAI/bge-base-zh-v1.5"  # 本地 embedding 模型
   max_tokens: 2048
   temperature: 0.3
