@@ -22,7 +22,7 @@ services:
       retries: 3
 
   milvus:
-    image: milvusdb/milvus:v2.4.0
+    image: milvusdb/milvus:v2.6.16
     container_name: rag-milvus
     depends_on:
       - etcd
