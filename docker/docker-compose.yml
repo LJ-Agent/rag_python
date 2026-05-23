@@ -1,24 +1,88 @@
 version: "3.8"
 
 services:
+  # ==================== Milvus 向量数据库 ====================
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: rag-etcd
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - etcd_data:/etcd
+    command: etcd -advertise-client-urls=http://etcd:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    networks:
+      - rag-network
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  milvus:
+    image: milvusdb/milvus:v2.4.0
+    container_name: rag-milvus
+    depends_on:
+      - etcd
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: ${MINIO_ENDPOINT:-http://minio:9000}
+      MINIO_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - milvus_data:/var/lib/milvus
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    command: milvus run standalone
+    networks:
+      - rag-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # ==================== Python AI 服务 ====================
   rag-python:
     build:
       context: ..
       dockerfile: docker/Dockerfile
     container_name: rag-python
+    depends_on:
+      kafka:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
     ports:
-      - "50051:50051"
-      - "50052:50052"
+      - "${GRPC_RETRIEVAL_PORT:-50051}:50051"
+      - "${GRPC_GENERATION_PORT:-50052}:50052"
     environment:
-      - LLM_API_KEY=${LLM_API_KEY}
-      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
-      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      # Kafka
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # MinIO
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      # Milvus
+      MILVUS_HOST: milvus
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      # LLM
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
     volumes:
       - ../config:/app/config:ro
     restart: unless-stopped
     networks:
       - rag-network
+
+volumes:
+  etcd_data:
+  milvus_data:
 
 networks:
   rag-network:

@@ -18,6 +18,7 @@ RUN pip install --no-cache-dir .
 COPY src/ src/
 COPY config/ config/
 COPY proto/ proto/
+COPY scripts/ scripts/
 
 # Pre-compile proto files
 RUN python scripts/compile_proto.py
