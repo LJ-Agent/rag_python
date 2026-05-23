@@ -13,6 +13,8 @@ def setup_logging(level: str = "INFO", log_format: str | None = None):
             "{extra[task_id]: <20} | {name}:{function}:{line} | {message}"
         )
 
+    logger.configure(extra={"task_id": ""})
+
     logger.add(
         sys.stdout,
         level=level,
