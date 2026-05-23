@@ -118,6 +118,6 @@ def create_generation_server() -> grpc.Server:
 
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers))
     generation_pb2_grpc.add_GenerationServiceServicer_to_server(GenerationServiceServicer(), server)
-    server.add_insecure_port(f"{cfg['server']['host']}:{port}")
+    server.add_insecure_port(f"{get_config()['server']['host']}:{port}")
     logger.info(f"GenerationService gRPC server on port {port}")
     return server

@@ -81,6 +81,6 @@ def create_retrieval_server() -> grpc.Server:
 
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers))
     retrieval_pb2_grpc.add_RetrievalServiceServicer_to_server(RetrievalServiceServicer(), server)
-    server.add_insecure_port(f"{cfg['server']['host']}:{port}")
+    server.add_insecure_port(f"{get_config()['server']['host']}:{port}")
     logger.info(f"RetrievalService gRPC server on port {port}")
     return server
