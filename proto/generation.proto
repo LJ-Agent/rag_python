@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package com.rag.grpc;
+
+option java_multiple_files = true;
+option java_package = "com.rag.communication.grpc.proto";
+
+service GenerationService {
+  rpc GenerateStream(GenerationRequest) returns (stream GenerationResponse);
+  rpc Generate(GenerationRequest) returns (GenerationResponse);
+}
+
+message GenerationRequest {
+  string query = 1;
+  repeated string contexts = 2;
+  string model = 3;
+  map<string, string> params = 4;
+  string conversation_id = 5;
+}
+
+message GenerationResponse {
+  string content = 1;
+  bool is_end = 2;
+  int32 token_count = 3;
+  string finish_reason = 4;
+}

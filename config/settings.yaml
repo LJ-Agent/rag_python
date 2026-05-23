@@ -1,0 +1,117 @@
+# RAG Python AI Service Configuration
+# 完全对齐 Java rag-server 的中间件配置
+
+server:
+  host: "0.0.0.0"
+
+# gRPC 服务端口 (对齐 Java GrpcConfig)
+grpc:
+  retrieval:
+    port: 50051
+    max_workers: 20
+  generation:
+    port: 50052
+    max_workers: 20
+  timeout_seconds: 10
+  max_retries: 3
+  retry_delay_ms: 1000
+
+# Kafka 配置 (对齐 Java KafkaConfig + KafkaConstants)
+kafka:
+  bootstrap_servers: "localhost:9092"
+  consumer_group: "rag-python-group"
+  # Java -> Python 消费主题
+  consume_topics:
+    file_process: "rag-file-process"
+    chunk_process: "rag-chunk-process"
+  # Python -> Java 生产主题
+  produce_topics:
+    task_complete: "rag-task-complete"
+    task_failed: "rag-task-failed"
+  consumer:
+    auto_offset_reset: "earliest"
+    enable_auto_commit: false
+    max_poll_records: 10
+    session_timeout_ms: 30000
+  producer:
+    acks: 1
+    retries: 3
+    linger_ms: 5
+
+# MinIO 对象存储 (对齐 Java MinioConfig, 只读)
+minio:
+  endpoint: "localhost:9000"
+  access_key: "minioadmin"
+  secret_key: "minioadmin"
+  bucket_name: "rag-documents"
+  secure: false
+
+# Milvus 向量数据库
+milvus:
+  host: "localhost"
+  port: 19530
+  collection_name: "rag_documents"
+  index_type: "IVF_FLAT"
+  metric_type: "L2"
+  nlist: 1024
+  dim: 768  # embedding 向量维度
+
+# 大模型 LLM 配置
+llm:
+  provider: "openai"  # openai / local
+  api_key: ""
+  base_url: "https://api.openai.com/v1"
+  embedding_model: "text-embedding-3-small"
+  chat_model: "gpt-4o"
+  local_embedding_model: "BAAI/bge-base-zh-v1.5"  # 本地 embedding 模型
+  max_tokens: 2048
+  temperature: 0.3
+  request_timeout: 60
+  max_retries: 3
+
+# Redis 缓存 (对齐 Java RedisConfig)
+redis:
+  host: "localhost"
+  port: 6379
+  password: ""
+  database: 0
+  pool_max_active: 20
+  pool_max_idle: 10
+  pool_min_idle: 5
+  timeout_ms: 5000
+  cache_ttl_seconds: 3600
+
+# 分块配置
+chunk:
+  default_size: 500      # 默认分块大小(字符)
+  overlap: 50            # 块重叠大小
+  min_chunk_size: 100    # 最小有效分块
+  strategy: "semantic"   # fixed / hierarchical / semantic
+
+# 检索配置
+retrieval:
+  default_top_k: 5
+  max_top_k: 20
+  score_threshold: 0.5
+  vector_weight: 0.7      # 混合检索向量权重
+  bm25_weight: 0.3        # 混合检索BM25权重
+  rerank_top_k: 10        # 重排序后保留数
+
+# 任务调度配置
+task:
+  max_concurrent: 5       # 最大并发任务数
+  retry_max: 3            # 最大重试次数
+  retry_base_delay: 2     # 重试基础延迟(秒), 指数退避
+  task_timeout: 600       # 单个任务超时(秒)
+
+# 文件处理配置
+file:
+  supported_types: ["pdf", "md", "txt", "docx"]
+  max_file_size_mb: 100
+
+# 日志
+logging:
+  level: "INFO"
+  format: "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {extra[task_id]: <20} | {name}:{function}:{line} | {message}"
+  rotation: "30 days"
+  retention: "90 days"

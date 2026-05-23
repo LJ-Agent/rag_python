@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=75.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rag-python"
+version = "1.0.0"
+description = "RAG Python AI Service - AI computation core for RAG knowledge base system"
+requires-python = ">=3.11"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "RAG Team"}
+]
+dependencies = [
+    "grpcio>=1.65.0",
+    "grpcio-tools>=1.65.0",
+    "protobuf>=5.27.0",
+    "kafka-python>=2.0.2",
+    "minio>=7.2.7",
+    "pymilvus>=2.4.0",
+    "openai>=1.40.0",
+    "redis>=5.0.0",
+    "jieba>=0.42.1",
+    "rank-bm25>=0.2.2",
+    "pypdf>=4.3.0",
+    "python-docx>=1.1.0",
+    "markdown>=3.6",
+    "loguru>=0.7.2",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0.0",
+    "sentence-transformers>=3.0.0",
+    "numpy>=1.26.0",
+    "httpx>=0.27.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.23.0",
+    "black>=24.0",
+    "ruff>=0.5.0",
+    "mypy>=1.10.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
