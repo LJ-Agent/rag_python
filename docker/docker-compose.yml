@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  rag-python:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: rag-python
+    ports:
+      - "50051:50051"
+      - "50052:50052"
+    environment:
+      - LLM_API_KEY=${LLM_API_KEY}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    volumes:
+      - ../config:/app/config:ro
+    restart: unless-stopped
+    networks:
+      - rag-network
+
+networks:
+  rag-network:
+    external: true
+    name: rag-network
