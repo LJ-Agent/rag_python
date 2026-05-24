@@ -50,6 +50,7 @@ def handle_chunk_process(context: TaskContext) -> dict:
     cleaned_path = context.data.get("cleanedPath")
     file_name = context.data.get("fileName", "unknown")
     strategy = context.data.get("chunkStrategy", "semantic")
+    chunk_config = context.data.get("chunkConfig")
 
     if not cleaned_path:
         raise TaskException("Missing cleanedPath in task data", task_id=context.task_id)
@@ -58,7 +59,8 @@ def handle_chunk_process(context: TaskContext) -> dict:
     cleaned_text = _minio.get_object(cleaned_path).decode("utf-8")
 
     # 2. Chunk only (no embedding, no Milvus)
-    chunks = _chunker.chunk(cleaned_text, context.document_id, strategy=strategy)
+    config = _parse_chunk_config(chunk_config) if chunk_config else {}
+    chunks = _chunker.chunk(cleaned_text, context.document_id, strategy=strategy, **config)
 
     # 3. Build chunk data list for Java callback
     chunk_list = [
@@ -106,6 +108,22 @@ def handle_embed_process(context: TaskContext) -> dict:
 
     logger.info(f"Embed process done: {file_name}, {count} chunks indexed")
     return {"chunkCount": count, "fileName": file_name}
+
+
+def _parse_chunk_config(raw) -> dict:
+    """Parse chunk config from Kafka message (string or dict) into kwargs for SmartChunker."""
+    import json
+    if raw is None:
+        return {}
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+    if not isinstance(raw, dict):
+        return {}
+    # Map JSON keys to chunker parameter names
+    return {k: v for k, v in raw.items() if v is not None}
 
 
 def handle_document_delete(context: TaskContext) -> dict:
