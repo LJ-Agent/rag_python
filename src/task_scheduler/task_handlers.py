@@ -44,7 +44,8 @@ def handle_file_process(context: TaskContext) -> dict:
 
 
 def handle_chunk_process(context: TaskContext) -> dict:
-    """Handle CHUNK_PROCESS task: download cleaned MD -> chunk -> embed -> store in Milvus + BM25."""
+    """Handle CHUNK_PROCESS task: download cleaned MD -> chunk only (no embed).
+    Returns chunk list for Java to save to DB before human review."""
     cleaned_path = context.data.get("cleanedPath")
     file_name = context.data.get("fileName", "unknown")
     strategy = context.data.get("chunkStrategy", "semantic")
@@ -55,28 +56,54 @@ def handle_chunk_process(context: TaskContext) -> dict:
     # 1. Read cleaned markdown from MinIO
     cleaned_text = _minio.get_object(cleaned_path).decode("utf-8")
 
-    # 2. Chunk
+    # 2. Chunk only (no embedding, no Milvus)
     chunks = _chunker.chunk(cleaned_text, context.document_id, strategy=strategy)
 
-    # 3. Embed and store in Milvus
-    chunk_ids = [c.chunk_id for c in chunks]
-    chunk_indices = [c.chunk_index for c in chunks]
-    contents = [c.content for c in chunks]
-    count = _embedder.embed_chunks(chunk_ids, context.document_id, context.kb_id, chunk_indices, contents)
-
-    # 4. Index in BM25 for keyword retrieval
-    bm25_docs = [
+    # 3. Build chunk data list for Java callback
+    chunk_list = [
         {
-            "chunk_id": c.chunk_id,
-            "document_id": c.document_id,
-            "chunk_index": c.chunk_index,
+            "chunkId": c.chunk_id,
+            "chunkIndex": c.chunk_index,
             "content": c.content,
+            "level": c.level,
+            "parentId": c.parent_id or "",
+            "charCount": len(c.content),
         }
         for c in chunks
     ]
+
+    logger.info(f"Chunk process done: {file_name}, {len(chunks)} chunks (no embed)")
+    return {"chunkCount": len(chunks), "fileName": file_name, "chunks": chunk_list}
+
+
+def handle_embed_process(context: TaskContext) -> dict:
+    """Handle EMBED_PROCESS task: embed chunks -> store in Milvus + BM25 (chunks already reviewed)."""
+    chunks_data = context.data.get("chunks", [])
+    file_name = context.data.get("fileName", "unknown")
+
+    if not chunks_data:
+        raise TaskException("Missing chunks in task data", task_id=context.task_id)
+
+    chunk_ids = [c.get("chunkId", c.get("chunk_id", "")) for c in chunks_data]
+    chunk_indices = [c.get("chunkIndex", c.get("chunk_index", 0)) for c in chunks_data]
+    contents = [c.get("content", "") for c in chunks_data]
+
+    # 1. Embed and store in Milvus
+    count = _embedder.embed_chunks(chunk_ids, context.document_id, context.kb_id, chunk_indices, contents)
+
+    # 2. Index in BM25 for keyword retrieval
+    bm25_docs = [
+        {
+            "chunk_id": c.get("chunkId", c.get("chunk_id", "")),
+            "document_id": context.document_id,
+            "chunk_index": c.get("chunkIndex", c.get("chunk_index", 0)),
+            "content": c.get("content", ""),
+        }
+        for c in chunks_data
+    ]
     _hybrid_retrieval.index_for_bm25(bm25_docs)
 
-    logger.info(f"Chunk process done: {file_name}, {count} chunks indexed")
+    logger.info(f"Embed process done: {file_name}, {count} chunks indexed")
     return {"chunkCount": count, "fileName": file_name}
 
 
@@ -84,6 +111,7 @@ def handle_chunk_process(context: TaskContext) -> dict:
 HANDLERS = {
     TaskType.FILE_PROCESS.value: handle_file_process,
     TaskType.CHUNK_PROCESS.value: handle_chunk_process,
+    TaskType.EMBED_PROCESS.value: handle_embed_process,
 }
 
 

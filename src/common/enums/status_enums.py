@@ -12,6 +12,7 @@ class DocumentStatus(str, Enum):
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
     CHUNKING = "CHUNKING"
+    CHUNK_REVIEW = "CHUNK_REVIEW"
     EMBEDDING = "EMBEDDING"
     COMPLETED = "COMPLETED"
     PARSING_FAILED = "PARSING_FAILED"
@@ -29,6 +30,7 @@ class DocumentStatus(str, Enum):
             DocumentStatus.APPROVED: "已通过",
             DocumentStatus.REJECTED: "已驳回",
             DocumentStatus.CHUNKING: "分块中",
+            DocumentStatus.CHUNK_REVIEW: "待块审核",
             DocumentStatus.EMBEDDING: "向量化中",
             DocumentStatus.COMPLETED: "已完成",
             DocumentStatus.PARSING_FAILED: "解析失败",
@@ -95,12 +97,14 @@ class TaskType(str, Enum):
 
     FILE_PROCESS = "FILE_PROCESS"
     CHUNK_PROCESS = "CHUNK_PROCESS"
+    EMBED_PROCESS = "EMBED_PROCESS"
 
     @property
     def description(self) -> str:
         return {
             TaskType.FILE_PROCESS: "文件处理",
-            TaskType.CHUNK_PROCESS: "分块向量化",
+            TaskType.CHUNK_PROCESS: "分块处理",
+            TaskType.EMBED_PROCESS: "向量化入库",
         }[self]
 
 

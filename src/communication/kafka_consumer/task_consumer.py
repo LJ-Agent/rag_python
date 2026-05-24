@@ -30,6 +30,7 @@ class TaskKafkaConsumer:
         self._topics = [
             cfg["consume_topics"]["file_process"],
             cfg["consume_topics"]["chunk_process"],
+            cfg["consume_topics"]["embed_process"],
         ]
         self._consumer: KafkaConsumer | None = None
         self._running = False
