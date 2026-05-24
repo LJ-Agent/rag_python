@@ -30,6 +30,7 @@ class SmartChunker:
         self._default_size = cfg["default_size"]
         self._overlap = cfg["overlap"]
         self._min_size = cfg["min_chunk_size"]
+        self._max_size = cfg.get("max_chunk_size", 60000)
         self._strategy = cfg.get("strategy", "semantic")
 
     def chunk(self, text: str, document_id: int, strategy: str | None = None) -> list[Chunk]:
@@ -41,10 +42,52 @@ class SmartChunker:
             "semantic": self._semantic_chunk,
         }[strategy]
         chunks = chunker(text, document_id)
+        # Enforce max chunk size (Milvus VarChar limit: 65535)
+        chunks = self._enforce_max_size(chunks)
         # Filter out chunks that are too short
         chunks = [c for c in chunks if len(c.content.strip()) >= self._min_size]
         logger.info(f"Chunking [{strategy}]: doc_id={document_id}, {len(chunks)} chunks")
         return chunks
+
+    def _enforce_max_size(self, chunks: list[Chunk]) -> list[Chunk]:
+        """Split any chunk exceeding max_chunk_size into smaller pieces."""
+        result = []
+        for c in chunks:
+            if len(c.content) <= self._max_size:
+                result.append(c)
+            else:
+                sub_texts = self._split_long_text(c.content)
+                for i, sub in enumerate(sub_texts):
+                    result.append(Chunk(
+                        chunk_id=f"{c.chunk_id}_p{i}",
+                        document_id=c.document_id,
+                        content=sub,
+                        chunk_index=c.chunk_index * 1000 + i,
+                        level=c.level,
+                        parent_id=c.parent_id,
+                        metadata=c.metadata,
+                    ))
+        return result
+
+    def _split_long_text(self, text: str) -> list[str]:
+        """Split long text into pieces <= max_size, preferring paragraph/sentence breaks."""
+        pieces = []
+        while len(text) > self._max_size:
+            split_at = self._max_size
+            # Try paragraph break
+            para_break = text.rfind("\n\n", 0, self._max_size)
+            if para_break > self._max_size // 2:
+                split_at = para_break + 2
+            else:
+                # Try sentence break (Chinese period)
+                sent_break = text.rfind("。", 0, self._max_size)
+                if sent_break > self._max_size // 2:
+                    split_at = sent_break + 1
+            pieces.append(text[:split_at].strip())
+            text = text[split_at:].strip()
+        if text.strip():
+            pieces.append(text.strip())
+        return pieces
 
     def _fixed_chunk(self, text: str, document_id: int) -> list[Chunk]:
         """Fixed-size chunking with overlap, avoiding mid-sentence breaks."""

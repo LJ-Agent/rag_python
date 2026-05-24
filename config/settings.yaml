@@ -85,6 +85,7 @@ redis:
 # 分块配置
 chunk:
   default_size: 500      # 默认分块大小(字符)
+  max_chunk_size: 30000  # 最大分块大小(字符), 受限于 Milvus VarChar 65535
   overlap: 50            # 块重叠大小
   min_chunk_size: 100    # 最小有效分块
   strategy: "semantic"   # fixed / hierarchical / semantic
