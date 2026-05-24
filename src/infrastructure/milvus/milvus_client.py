@@ -94,26 +94,35 @@ class MilvusVectorClient:
         top_k: int = 5,
         score_threshold: float = 0.5,
     ) -> list[dict[str, Any]]:
-        """Vector similarity search within specified knowledge bases."""
+        """Vector similarity search within specified knowledge bases.
+
+        score_threshold is treated as a similarity threshold (0~1, higher = better).
+        Internally converted to L2 distance for filtering.
+        """
         search_params = {"metric_type": self._metric_type, "params": {"nprobe": 16}}
         expr = f"kb_id in {kb_ids}" if kb_ids else None
+        # Retrieve extra candidates for post-filtering
         results = self._collection.search(
             data=[query_vector],
             anns_field="embedding",
             param=search_params,
-            limit=top_k,
+            limit=max(top_k * 2, 10),
             expr=expr,
             output_fields=["chunk_id", "document_id", "kb_id", "chunk_index", "content"],
         )
         hits = []
         for result in results[0]:
-            if result.distance >= score_threshold:
+            # L2 metric: smaller distance = more similar
+            # Convert L2 distance to similarity score (0~1, higher = better)
+            # For normalized vectors: L2 ∈ [0, 2], similarity = 1 - L2/2
+            similarity = 1.0 - result.distance / 2.0
+            if similarity >= score_threshold:
                 hits.append({
                     "chunk_id": result.entity.get("chunk_id"),
                     "document_id": result.entity.get("document_id"),
                     "chunk_index": result.entity.get("chunk_index"),
                     "content": result.entity.get("content"),
-                    "score": result.distance,
+                    "score": round(similarity, 4),
                 })
         return hits
 

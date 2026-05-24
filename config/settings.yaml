@@ -96,7 +96,7 @@ chunk:
 retrieval:
   default_top_k: 5
   max_top_k: 20
-  score_threshold: 0.5
+  score_threshold: 0.3
   vector_weight: 0.7      # 混合检索向量权重
   bm25_weight: 0.3        # 混合检索BM25权重
   rerank_top_k: 10        # 重排序后保留数
