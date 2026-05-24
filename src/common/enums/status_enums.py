@@ -49,7 +49,8 @@ class DocumentStatus(str, Enum):
             DocumentStatus.PENDING_REVIEW: {DocumentStatus.APPROVED, DocumentStatus.REJECTED},
             DocumentStatus.APPROVED: {DocumentStatus.CHUNKING},
             DocumentStatus.REJECTED: {DocumentStatus.PARSING},
-            DocumentStatus.CHUNKING: {DocumentStatus.EMBEDDING, DocumentStatus.CHUNKING_FAILED},
+            DocumentStatus.CHUNKING: {DocumentStatus.CHUNK_REVIEW, DocumentStatus.CHUNKING_FAILED},
+            DocumentStatus.CHUNK_REVIEW: {DocumentStatus.EMBEDDING, DocumentStatus.CHUNKING},
             DocumentStatus.EMBEDDING: {DocumentStatus.COMPLETED, DocumentStatus.EMBEDDING_FAILED},
             DocumentStatus.PARSING_FAILED: {DocumentStatus.PARSING},
             DocumentStatus.CLEANING_FAILED: {DocumentStatus.CLEANING},
@@ -73,7 +74,7 @@ class DocumentStatus(str, Enum):
             DocumentStatus.PARSING: DocumentStatus.CLEANING,
             DocumentStatus.CLEANING: DocumentStatus.PENDING_REVIEW,
             DocumentStatus.APPROVED: DocumentStatus.CHUNKING,
-            DocumentStatus.CHUNKING: DocumentStatus.EMBEDDING,
+            DocumentStatus.CHUNKING: DocumentStatus.CHUNK_REVIEW,
             DocumentStatus.EMBEDDING: DocumentStatus.COMPLETED,
         }
         if current not in _mapping:
