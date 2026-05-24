@@ -8,6 +8,8 @@ class KafkaTopics:
     # Java -> Python (task dispatch)
     FILE_PROCESS = "rag-file-process"
     CHUNK_PROCESS = "rag-chunk-process"
+    EMBED_PROCESS = "rag-embed-process"
+    DOCUMENT_DELETE = "rag-document-delete"
 
     # Python -> Java (status report)
     TASK_COMPLETE = "rag-task-complete"

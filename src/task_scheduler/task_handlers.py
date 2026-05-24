@@ -7,6 +7,7 @@ from ai_core.chunker.smart_chunker import SmartChunker
 from ai_core.embedder.embedding_service import EmbeddingService
 from ai_core.retrieval.hybrid_retrieval import HybridRetrieval
 from infrastructure.minio.minio_client import get_minio_client
+from infrastructure.milvus.milvus_client import get_milvus_client
 from infrastructure.bm25.bm25_engine import get_bm25_engine
 from .task_dispatcher import TaskContext
 
@@ -107,11 +108,25 @@ def handle_embed_process(context: TaskContext) -> dict:
     return {"chunkCount": count, "fileName": file_name}
 
 
+def handle_document_delete(context: TaskContext) -> dict:
+    """Handle DOCUMENT_DELETE task: remove vectors from Milvus and index from BM25."""
+    doc_id = context.document_id
+    milvus = get_milvus_client()
+    bm25 = get_bm25_engine()
+
+    milvus.delete_by_document(doc_id)
+    bm25.remove_document(doc_id)
+
+    logger.info(f"Document cleanup done: docId={doc_id}, milvus_deleted, bm25_removed")
+    return {"documentId": doc_id, "status": "cleaned"}
+
+
 # Handler registry
 HANDLERS = {
     TaskType.FILE_PROCESS.value: handle_file_process,
     TaskType.CHUNK_PROCESS.value: handle_chunk_process,
     TaskType.EMBED_PROCESS.value: handle_embed_process,
+    "DOCUMENT_DELETE": handle_document_delete,
 }
 
 

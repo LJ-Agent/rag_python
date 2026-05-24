@@ -31,6 +31,7 @@ class TaskKafkaConsumer:
             cfg["consume_topics"]["file_process"],
             cfg["consume_topics"]["chunk_process"],
             cfg["consume_topics"]["embed_process"],
+            cfg["consume_topics"]["document_delete"],
         ]
         self._consumer: KafkaConsumer | None = None
         self._running = False

@@ -25,6 +25,7 @@ kafka:
     file_process: "rag-file-process"
     chunk_process: "rag-chunk-process"
     embed_process: "rag-embed-process"
+    document_delete: "rag-document-delete"
   # Python -> Java 生产主题
   produce_topics:
     task_complete: "rag-task-complete"
