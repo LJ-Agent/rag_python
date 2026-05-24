@@ -136,12 +136,16 @@ class SmartChunker:
                 break_point = text.rfind("。", start, end)
                 if break_point == -1:
                     break_point = text.rfind("\n", start, end)
-                if break_point > start:
+                if break_point > max(start, 0):
                     end = break_point + 1
-            content = text[start:end].strip()
+            content = text[max(start, 0):end].strip()
             chunk_id = f"chunk_{document_id}_{idx}"
             chunks.append(Chunk(chunk_id=chunk_id, document_id=document_id, content=content, chunk_index=idx))
-            start = end - self._task_overlap
+            # Advance start, ensuring forward progress
+            next_start = end - self._task_overlap
+            if next_start <= max(start, 0):
+                break
+            start = next_start
             idx += 1
         return chunks
 
