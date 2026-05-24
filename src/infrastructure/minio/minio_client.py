@@ -1,4 +1,4 @@
-"""MinIO object storage client — read-only, aligned with Java MinioConfig."""
+"""MinIO object storage client, aligned with Java MinioConfig."""
 from minio import Minio
 from minio.error import S3Error
 from common.config_loader import get_config
@@ -27,43 +27,68 @@ class MinioClient:
         if not self._client.bucket_exists(self._bucket):
             raise ResourceException(f"MinIO bucket not found: {self._bucket}")
 
+    def _strip_bucket_prefix(self, object_path: str) -> str:
+        """Strip bucket name prefix if present (Java may include it in originalFileUrl)."""
+        prefix = self._bucket + "/"
+        if object_path.startswith(prefix):
+            return object_path[len(prefix):]
+        return object_path
+
     def get_object(self, object_path: str) -> bytes:
         """Read an object's full content from MinIO by path."""
+        clean_path = self._strip_bucket_prefix(object_path)
         try:
-            response = self._client.get_object(self._bucket, object_path)
+            response = self._client.get_object(self._bucket, clean_path)
             data = response.read()
             response.close()
             response.release_conn()
-            logger.info(f"MinIO read: {object_path} ({len(data)} bytes)")
+            logger.info(f"MinIO read: {clean_path} ({len(data)} bytes)")
             return data
         except S3Error as e:
-            raise ResourceException(f"MinIO read failed: {object_path} — {e}")
+            raise ResourceException(f"MinIO read failed: {clean_path} — {e}")
+
+    def put_object(self, object_path: str, data: bytes, content_type: str = "text/plain"):
+        """Write an object to MinIO."""
+        import io
+        clean_path = self._strip_bucket_prefix(object_path)
+        try:
+            self._client.put_object(
+                self._bucket, clean_path,
+                io.BytesIO(data), len(data),
+                content_type=content_type,
+            )
+            logger.info(f"MinIO write: {clean_path} ({len(data)} bytes)")
+        except S3Error as e:
+            raise ResourceException(f"MinIO write failed: {clean_path} — {e}")
 
     def get_object_stream(self, object_path: str, chunk_size: int = 8192):
         """Stream read an object, yielding chunks."""
+        clean_path = self._strip_bucket_prefix(object_path)
         try:
-            response = self._client.get_object(self._bucket, object_path)
+            response = self._client.get_object(self._bucket, clean_path)
             for chunk in response.stream(chunk_size):
                 yield chunk
             response.close()
             response.release_conn()
         except S3Error as e:
-            raise ResourceException(f"MinIO stream failed: {object_path} — {e}")
+            raise ResourceException(f"MinIO stream failed: {clean_path} — {e}")
 
     def object_exists(self, object_path: str) -> bool:
         """Check if an object exists in the bucket."""
+        clean_path = self._strip_bucket_prefix(object_path)
         try:
-            self._client.stat_object(self._bucket, object_path)
+            self._client.stat_object(self._bucket, clean_path)
             return True
         except S3Error:
             return False
 
     def get_presigned_url(self, object_path: str, expires_seconds: int = 3600) -> str:
         """Generate a temporary download URL (7-day expiry matching Java config)."""
+        clean_path = self._strip_bucket_prefix(object_path)
         try:
-            return self._client.presigned_get_object(self._bucket, object_path, expires_seconds)
+            return self._client.presigned_get_object(self._bucket, clean_path, expires_seconds)
         except S3Error as e:
-            raise ResourceException(f"MinIO presigned URL failed: {object_path} — {e}")
+            raise ResourceException(f"MinIO presigned URL failed: {clean_path} — {e}")
 
     @property
     def bucket(self) -> str:

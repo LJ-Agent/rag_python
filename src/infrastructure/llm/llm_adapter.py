@@ -25,26 +25,41 @@ class LLMAdapter:
         self._timeout = cfg.get("request_timeout", 60)
         self._max_retries = cfg.get("max_retries", 3)
 
-        self._client = OpenAI(
-            api_key=self._api_key,
-            base_url=self._base_url,
-            timeout=self._timeout,
-            max_retries=self._max_retries,
-        )
-        self._async_client = AsyncOpenAI(
-            api_key=self._api_key,
-            base_url=self._base_url,
-            timeout=self._timeout,
-            max_retries=self._max_retries,
-        )
+        self._client = None
+        self._async_client = None
         self._local_embedder = None
+
+        # Preload local embedding model to avoid first-request timeout
+        use_local = cfg.get("use_local_embedding", False) or not cfg.get("api_key")
+        if use_local:
+            self._init_local_embedder()
+
+    def _get_client(self):
+        if self._client is None:
+            self._client = OpenAI(
+                api_key=self._api_key,
+                base_url=self._base_url,
+                timeout=self._timeout,
+                max_retries=self._max_retries,
+            )
+        return self._client
+
+    def _get_async_client(self):
+        if self._async_client is None:
+            self._async_client = AsyncOpenAI(
+                api_key=self._api_key,
+                base_url=self._base_url,
+                timeout=self._timeout,
+                max_retries=self._max_retries,
+            )
+        return self._async_client
 
     # ─── Embedding ─────────────────────────────────────────
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """Batch compute embeddings for a list of texts."""
         try:
-            response = self._client.embeddings.create(
+            response = self._get_client().embeddings.create(
                 model=self._embedding_model,
                 input=texts,
             )
@@ -60,7 +75,7 @@ class LLMAdapter:
     def generate(self, messages: list[dict], model: str | None = None) -> dict:
         """Non-streaming chat completion. Returns {content, token_count, finish_reason}."""
         try:
-            response = self._client.chat.completions.create(
+            response = self._get_client().chat.completions.create(
                 model=model or self._chat_model,
                 messages=messages,
                 max_tokens=self._max_tokens,
@@ -82,7 +97,7 @@ class LLMAdapter:
     ) -> AsyncIterator[dict]:
         """Streaming chat completion. Yields {content, is_end, token_count, finish_reason} chunks."""
         try:
-            stream = await self._async_client.chat.completions.create(
+            stream = await self._get_async_client().chat.completions.create(
                 model=model or self._chat_model,
                 messages=messages,
                 max_tokens=self._max_tokens,

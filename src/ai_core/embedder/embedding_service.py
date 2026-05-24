@@ -15,7 +15,7 @@ class EmbeddingService:
         self._llm = get_llm_adapter()
         self._milvus = get_milvus_client()
         cfg = get_config()["llm"]
-        self._use_local = not cfg.get("api_key")  # fall back to local if no API key
+        self._use_local = cfg.get("use_local_embedding", False) or not cfg.get("api_key")
         self._batch_size = 20
 
     def embed_chunks(

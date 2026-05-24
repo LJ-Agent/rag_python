@@ -20,7 +20,7 @@ _minio = get_minio_client()
 
 
 def handle_file_process(context: TaskContext) -> dict:
-    """Handle FILE_PROCESS task: download from MinIO -> parse -> clean -> upload cleaned MD."""
+    """Handle FILE_PROCESS task: download from MinIO -> parse -> clean -> write cleaned MD back to MinIO."""
     original_url = context.data.get("originalFileUrl")
     file_name = context.data.get("fileName", "unknown")
 
@@ -31,10 +31,9 @@ def handle_file_process(context: TaskContext) -> dict:
     file_data = _minio.get_object(original_url)
     # 2. Parse and clean
     cleaned_text = _parser.parse(file_data, file_name)
-    # 3. Store cleaned MD back (use a known path convention)
+    # 3. Write cleaned MD back to MinIO
     cleaned_path = original_url.rsplit(".", 1)[0] + "_cleaned.md"
-    # Note: MinIO write is delegated to Java side; here we just return the path + text
-    # In practice, you may store via MinIO's put_object if Python has write access
+    _minio.put_object(cleaned_path, cleaned_text.encode("utf-8"), "text/markdown")
     logger.info(f"File process done: {file_name} -> {cleaned_path}, {len(cleaned_text)} chars")
 
     return {

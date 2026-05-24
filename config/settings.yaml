@@ -12,7 +12,7 @@ grpc:
   generation:
     port: 50052
     max_workers: 20
-  timeout_seconds: 10
+  timeout_seconds: 60
   max_retries: 3
   retry_delay_ms: 1000
 
@@ -64,6 +64,7 @@ llm:
   embedding_model: "text-embedding-3-small"
   chat_model: "${LLM_CHAT_MODEL:gpt-4o}"
   local_embedding_model: "BAAI/bge-base-zh-v1.5"  # 本地 embedding 模型
+  use_local_embedding: true  # 使用本地 sentence-transformers 模型，无需 API 调用
   max_tokens: 2048
   temperature: 0.3
   request_timeout: 60

@@ -18,7 +18,8 @@ class StatusKafkaProducer:
         cfg = get_config()["kafka"]
         self._producer = KafkaProducer(
             bootstrap_servers=cfg["bootstrap_servers"],
-            value_serializer=lambda v: v.encode("utf-8"),
+            key_serializer=lambda k: k.encode("utf-8") if isinstance(k, str) else k,
+            value_serializer=lambda v: v.encode("utf-8") if isinstance(v, str) else v,
             acks=cfg["producer"].get("acks", 1),
             retries=cfg["producer"].get("retries", 3),
             linger_ms=cfg["producer"].get("linger_ms", 5),

@@ -1,10 +1,12 @@
-"""Kafka consumer — listens to rag-file-process and rag-chunk-process topics."""
+"""Kafka consumer — listens to rag-file-process and rag-chunk-process topics.
+Uses manual partition assignment (instead of consumer groups) for Kafka 4.x KRaft compatibility.
+"""
 import json
 import threading
 import time
 import traceback
 
-from kafka import KafkaConsumer
+from kafka import KafkaConsumer, TopicPartition
 from kafka.errors import KafkaError
 
 from common.config_loader import get_config
@@ -38,15 +40,24 @@ class TaskKafkaConsumer:
         """Start the Kafka consumer in a background thread."""
         consumer_cfg = get_config()["kafka"]["consumer"]
         self._consumer = KafkaConsumer(
-            *self._topics,
             bootstrap_servers=self._servers,
-            group_id=self._consumer_group,
             auto_offset_reset=consumer_cfg["auto_offset_reset"],
             enable_auto_commit=consumer_cfg["enable_auto_commit"],
             max_poll_records=consumer_cfg["max_poll_records"],
-            session_timeout_ms=consumer_cfg.get("session_timeout_ms", 30000),
             value_deserializer=lambda m: m.decode("utf-8"),
         )
+        # Manual partition assignment for Kafka 4.x KRaft compatibility
+        tps = []
+        for topic in self._topics:
+            partitions = self._consumer.partitions_for_topic(topic)
+            if partitions:
+                for p in partitions:
+                    tps.append(TopicPartition(topic, p))
+        if tps:
+            self._consumer.assign(tps)
+            self._consumer.seek_to_beginning(*tps)
+            logger.info(f"Assigned {len(tps)} partitions across {len(self._topics)} topics")
+
         self._running = True
         self._thread = threading.Thread(target=self._poll_loop, daemon=True, name="kafka-consumer")
         self._thread.start()
@@ -62,8 +73,6 @@ class TaskKafkaConsumer:
                             self._process_message(msg.value)
                         except Exception as e:
                             logger.error(f"Message processing error: {e}\n{traceback.format_exc()}")
-                        finally:
-                            self._consumer.commit()
             except KafkaError as e:
                 logger.error(f"Kafka poll error: {e}")
                 time.sleep(5)

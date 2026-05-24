@@ -15,6 +15,7 @@ class HybridRetrieval:
 
     def __init__(self):
         cfg = get_config()["retrieval"]
+        llm_cfg = get_config()["llm"]
         self._milvus = get_milvus_client()
         self._bm25 = get_bm25_engine()
         self._llm = get_llm_adapter()
@@ -22,6 +23,7 @@ class HybridRetrieval:
         self._bm25_weight = cfg["bm25_weight"]
         self._score_threshold = cfg["score_threshold"]
         self._rerank_top_k = cfg["rerank_top_k"]
+        self._use_local_embedding = llm_cfg.get("use_local_embedding", False)
 
     def retrieve(
         self,
@@ -33,8 +35,11 @@ class HybridRetrieval:
         """Execute hybrid retrieval and return ranked results."""
         threshold = score_threshold if score_threshold is not None else self._score_threshold
         try:
-            # 1. Vector retrieval
-            query_embedding = self._llm.embed_single(query)
+            # 1. Vector retrieval (use local or remote embedding)
+            if self._use_local_embedding:
+                query_embedding = self._llm.embed_local([query])[0]
+            else:
+                query_embedding = self._llm.embed_single(query)
             vector_results = self._milvus.search(
                 query_vector=query_embedding,
                 kb_ids=kb_ids,
@@ -47,9 +52,8 @@ class HybridRetrieval:
             # 3. Weighted fusion (RRF: Reciprocal Rank Fusion)
             fused = self._fuse_results(vector_results, bm25_results)
 
-            # 4. Re-rank: pick top-k by fused score, filter by threshold
+            # 4. Sort by fused RRF score (not absolute relevance, so no threshold)
             fused.sort(key=lambda x: x["score"], reverse=True)
-            fused = [r for r in fused if r["score"] >= threshold]
 
             result = fused[:top_k]
 
