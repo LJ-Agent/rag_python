@@ -99,7 +99,7 @@ RAG-PYTHON/
 │       └── kafka_producer/
 │           └── status_producer.py      # Kafka生产者(rag-task-complete/rag-task-failed)
 ├── docker/
-│   ├── Dockerfile                      # Python 3.11-slim镜像
+│   ├── Dockerfile                      # Python 3.11-alpine镜像
 │   └── docker-compose.yml              # 本地开发编排
 ├── pyproject.toml                       # 项目依赖管理
 └── .gitignore
@@ -204,8 +204,43 @@ PYTHONPATH=src python -m main
 ### Docker部署
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d
+# 构建镜像（在 RAG-PYTHON 根目录）
+docker build -t rag-python:latest -f docker/Dockerfile .
+
+# 运行容器
+docker run -d --name rag-python \
+  --network rag-network \
+  -e KAFKA_BOOTSTRAP_SERVERS=kafka:9092 \
+  -e MINIO_ENDPOINT=minio:9000 \
+  -e MINIO_ACCESS_KEY=minioadmin \
+  -e MINIO_SECRET_KEY=minioadmin123 \
+  -e MILVUS_HOST=milvus \
+  -e REDIS_HOST=redis \
+  -e LLM_API_KEY=sk-your-key \
+  -e LLM_BASE_URL=https://api.deepseek.com \
+  -p 50051:50051 -p 50052:50052 \
+  rag-python:latest
 ```
+
+或与 Java 服务协同部署（推荐，使用 RAG-BACKEND 的 `docker-compose.yml`）：
+
+```bash
+cd ../RAG-BACKEND
+docker-compose up -d --build
+```
+
+**Dockerfile 关键要点**：
+
+- **基础镜像**：`python:3.11-alpine`（musl libc），Debian 系镜像可能因 Docker registry 镜像问题无法拉取。
+- **PyTorch**：`pip install torch --index-url https://download.pytorch.org/whl/cpu` —— PyTorch 官方提供 musllinux wheel，PyPI 上没有 musl 版本，必须从 PyTorch 索引安装，且必须在其他依赖之前安装。
+- **Proto 编译**：构建时执行 `python scripts/compile_proto.py` 预编译 `.proto` 文件。脚本会自动修复生成的 `*_pb2_grpc.py` 中的导入路径（`import retrieval_pb2` → `from communication.grpc_server.generated import retrieval_pb2`）。
+- **非 root 用户**：运行时以 `rag` 用户运行（`adduser -D -s /bin/sh rag`）。
+
+**常见问题**：
+
+- **`KeyError: 'task_id'`**：Loguru 日志格式使用 `{extra[task_id]}` 占位，需要在 `logger.py` 中添加 `logger.configure(extra={"task_id": ""})` 设置默认值。
+- **`KeyError: 'server'`**：`create_retrieval_server()` / `create_generation_server()` 中 `server` 是顶层配置键（非 `grpc` 子键），需用 `get_config()['server']['host']` 而非 `cfg['server']['host']`。
+- **MinIO 连接报 `path in endpoint is not allowed`**：Python minio 客户端的 endpoint 不能含 `http://` 前缀，需使用 `minio:9000` 格式，与 Java SDK 相反。
 
 ## 配置参数说明
 
