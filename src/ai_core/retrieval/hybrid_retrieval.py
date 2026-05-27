@@ -67,29 +67,34 @@ class HybridRetrieval:
             raise RetrievalException(f"Retrieval failed: {e}")
 
     def _fuse_results(self, vector_results: list[dict], bm25_results: list[dict]) -> list[dict]:
-        """Fuse vector and BM25 results using weighted RRF."""
-        scores: dict[str, float] = {}
+        """Fuse vector and BM25 using weighted RRF for ranking, keep raw similarity scores."""
+        rrf_scores: dict[str, float] = {}
+        raw_scores: dict[str, float] = {}
         content_map: dict[str, dict] = {}
 
-        # Vector results
+        # Vector results — track both RRF rank score and raw Milvus similarity
         for rank, r in enumerate(vector_results):
             cid = r["chunk_id"]
-            scores[cid] = scores.get(cid, 0) + self._vector_weight / (60 + rank + 1)
+            rrf_scores[cid] = rrf_scores.get(cid, 0) + self._vector_weight / (60 + rank + 1)
+            raw_scores[cid] = r["score"]  # real Milvus similarity (0~1, higher = better)
             content_map[cid] = r
 
         # BM25 results
         for rank, r in enumerate(bm25_results):
             cid = r["chunk_id"]
-            scores[cid] = scores.get(cid, 0) + self._bm25_weight / (60 + rank + 1)
+            rrf_scores[cid] = rrf_scores.get(cid, 0) + self._bm25_weight / (60 + rank + 1)
             if cid not in content_map:
+                raw_scores[cid] = r["score"]  # real BM25 score (0~1, higher = better)
                 content_map[cid] = r
 
         fused = []
-        for chunk_id, score in scores.items():
+        for chunk_id in rrf_scores:
             info = content_map[chunk_id]
-            info["score"] = round(score, 6)
+            info["score"] = round(raw_scores[chunk_id], 4)  # real similarity, not RRF
             fused.append(info)
 
+        # Sort by RRF score to keep correct cross-modal ranking
+        fused.sort(key=lambda x: rrf_scores[x["chunk_id"]], reverse=True)
         return fused
 
     def index_for_bm25(self, documents: list[dict]):
