@@ -23,4 +23,6 @@ message GenerationResponse {
   bool is_end = 2;
   int32 token_count = 3;
   string finish_reason = 4;
+  string content_type = 5;
+  string reasoning_content = 6;
 }

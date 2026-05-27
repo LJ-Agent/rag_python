@@ -106,17 +106,33 @@ class LLMAdapter:
             )
             token_count = 0
             async for chunk in stream:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    content = chunk.choices[0].delta.content
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+                # 检查推理内容（DeepSeek-R1 / OpenAI o1 等推理模型）
+                reasoning = getattr(delta, 'reasoning_content', None) or ''
+                if reasoning:
+                    token_count += 1
+                    yield {
+                        "content": reasoning,
+                        "type": "reasoning",
+                        "is_end": False,
+                        "token_count": token_count,
+                        "finish_reason": "",
+                    }
+                elif delta.content:
+                    content = delta.content
                     token_count += 1
                     yield {
                         "content": content,
+                        "type": "content",
                         "is_end": False,
                         "token_count": token_count,
                         "finish_reason": "",
                     }
             yield {
                 "content": "",
+                "type": "content",
                 "is_end": True,
                 "token_count": token_count,
                 "finish_reason": "stop",

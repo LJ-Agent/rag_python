@@ -98,11 +98,14 @@ class GenerationServiceServicer:
                     break
                 if chunk is None:
                     break
+                ct = chunk.get("type", "")
                 yield generation_pb2.GenerationResponse(
                     content=chunk.get("content", ""),
                     is_end=chunk.get("is_end", False),
                     token_count=chunk.get("token_count", 0),
                     finish_reason=chunk.get("finish_reason", ""),
+                    content_type=ct,
+                    reasoning_content=chunk.get("content", "") if ct == "reasoning" else "",
                 )
         except Exception as e:
             logger.error(f"gRPC stream error: {e}")
