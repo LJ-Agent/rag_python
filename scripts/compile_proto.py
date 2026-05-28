@@ -23,14 +23,14 @@ def compile_protos():
         )
     # Fix imports in generated _grpc.py files to use package-relative imports
     for grpc_file in OUT_DIR.glob("*_pb2_grpc.py"):
-        content = grpc_file.read_text()
+        content = grpc_file.read_text(encoding="utf-8")
         for pb2_file in OUT_DIR.glob("*_pb2.py"):
             if pb2_file.stem != "__init__":
                 content = content.replace(
                     f"import {pb2_file.stem} as",
                     f"from communication.grpc_server.generated import {pb2_file.stem} as",
                 )
-        grpc_file.write_text(content)
+        grpc_file.write_text(content, encoding="utf-8")
 
     # Create __init__ for generated package
     (OUT_DIR / "__init__.py").touch()

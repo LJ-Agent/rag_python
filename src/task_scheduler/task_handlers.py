@@ -1,4 +1,5 @@
 """Task handler functions — connect Kafka tasks to AI core modules."""
+from common.config_loader import get_config
 from common.enums.status_enums import TaskType
 from common.exception.exceptions import TaskException
 from common.util.logger import get_logger
@@ -20,28 +21,100 @@ _hybrid_retrieval = HybridRetrieval()
 _minio = get_minio_client()
 
 
+def _use_cleaning_service() -> bool:
+    """Check if the independent RAG-CLEANING service should be used."""
+    cfg = get_config()
+    return cfg.get("cleaning", {}).get("enabled", False)
+
+
+def _clean_via_service(context: TaskContext, original_url: str, file_name: str) -> dict:
+    """Delegate document cleaning to RAG-CLEANING gRPC service."""
+    from infrastructure.cleaning_client.cleaning_client import clean_document
+    from common.util.utils import get_file_extension
+
+    mime_map = {
+        "pdf": "application/pdf",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "md": "text/markdown",
+        "txt": "text/plain",
+    }
+    ext = get_file_extension(file_name)
+    mime_type = mime_map.get(ext, "application/octet-stream")
+
+    response = clean_document(
+        task_id=context.task_id,
+        document_id=str(context.document_id),
+        kb_id=context.kb_id,
+        tenant_id="default",
+        file_name=file_name,
+        file_url=original_url,
+        mime_type=mime_type,
+    )
+
+    from communication.grpc_server.generated import cleaning_pb2
+    if response.status == cleaning_pb2.FAILED:
+        raise TaskException(
+            f"Cleaning service failed: {response.error_message}",
+            task_id=context.task_id,
+        )
+
+    cleaned_path = response.markdown_url
+    content_length = 0
+    # Try to read the cleaned content to get length
+    try:
+        content = _minio.get_object(cleaned_path)
+        content_length = len(content)
+    except Exception:
+        pass
+
+    logger.info(
+        f"File process done (via cleaning service): {file_name} -> {cleaned_path}, "
+        f"{content_length} chars, quality={response.quality.overall_score:.2f}"
+    )
+
+    return {
+        "cleanedPath": cleaned_path,
+        "contentLength": content_length,
+        "fileName": file_name,
+        "qualityScore": response.quality.overall_score,
+        "docTitle": response.doc_meta.title,
+        "pageCount": response.doc_meta.page_count,
+        "wordCount": response.doc_meta.word_count,
+    }
+
+
+def _clean_via_builtin(context: TaskContext, original_url: str, file_name: str) -> dict:
+    """Use built-in DocumentParser (legacy fallback)."""
+    file_data = _minio.get_object(original_url)
+    cleaned_text = _parser.parse(file_data, file_name)
+    cleaned_path = original_url.rsplit(".", 1)[0] + "_cleaned.md"
+    _minio.put_object(cleaned_path, cleaned_text.encode("utf-8"), "text/markdown")
+    logger.info(f"File process done (built-in): {file_name} -> {cleaned_path}, {len(cleaned_text)} chars")
+    return {
+        "cleanedPath": cleaned_path,
+        "contentLength": len(cleaned_text),
+        "fileName": file_name,
+    }
+
+
 def handle_file_process(context: TaskContext) -> dict:
-    """Handle FILE_PROCESS task: download from MinIO -> parse -> clean -> write cleaned MD back to MinIO."""
+    """Handle FILE_PROCESS task: clean document via RAG-CLEANING service (or built-in fallback)."""
     original_url = context.data.get("originalFileUrl")
     file_name = context.data.get("fileName", "unknown")
 
     if not original_url:
         raise TaskException("Missing originalFileUrl in task data", task_id=context.task_id)
 
-    # 1. Read original file from MinIO
-    file_data = _minio.get_object(original_url)
-    # 2. Parse and clean
-    cleaned_text = _parser.parse(file_data, file_name)
-    # 3. Write cleaned MD back to MinIO
-    cleaned_path = original_url.rsplit(".", 1)[0] + "_cleaned.md"
-    _minio.put_object(cleaned_path, cleaned_text.encode("utf-8"), "text/markdown")
-    logger.info(f"File process done: {file_name} -> {cleaned_path}, {len(cleaned_text)} chars")
-
-    return {
-        "cleanedPath": cleaned_path,
-        "contentLength": len(cleaned_text),
-        "fileName": file_name,
-    }
+    if _use_cleaning_service():
+        try:
+            return _clean_via_service(context, original_url, file_name)
+        except Exception as e:
+            logger.warning(f"Cleaning service failed, falling back to built-in parser: {e}")
+            return _clean_via_builtin(context, original_url, file_name)
+    else:
+        return _clean_via_builtin(context, original_url, file_name)
 
 
 def handle_chunk_process(context: TaskContext) -> dict:

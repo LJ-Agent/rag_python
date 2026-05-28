@@ -1,0 +1,122 @@
+syntax = "proto3";
+
+package com.rag.cleaning;
+
+option java_package = "com.rag.communication.grpc.proto";
+option java_multiple_files = true;
+
+// ============================================================
+// CleaningService — 文档清洗 gRPC 服务 (端口 50056)
+// ============================================================
+
+service CleaningService {
+  // 同步清洗请求 (小文件/实时场景)
+  rpc Clean(CleaningRequest) returns (CleaningResponse);
+
+  // 流式清洗请求 (大文件)
+  rpc CleanStream(stream CleaningChunk) returns (CleaningResponse);
+
+  // 查询任务状态
+  rpc GetTaskStatus(TaskStatusRequest) returns (TaskStatusResponse);
+
+  // 健康检查
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+// ─── 清洗请求 ─────────────────────────────────────────────
+
+message CleaningRequest {
+  string task_id = 1;           // 全局唯一任务ID (雪花ID)
+  string document_id = 2;       // 文档ID
+  int64 kb_id = 3;              // 知识库ID
+  string tenant_id = 4;         // 租户ID
+  string file_name = 5;         // 原始文件名 (含扩展名)
+  string file_url = 6;          // MinIO 原始文件路径
+  string mime_type = 7;         // MIME 类型
+  map<string, string> params = 8;  // 扩展参数 (清洗规则覆盖等)
+}
+
+message CleaningChunk {
+  string task_id = 1;
+  bytes data = 2;               // 文件数据分片
+  int32 chunk_index = 3;        // 分片序号
+  bool is_last = 4;             // 是否最后一片
+  CleaningRequest metadata = 5; // 首片携带元数据
+}
+
+// ─── 清洗响应 ─────────────────────────────────────────────
+
+message CleaningResponse {
+  string task_id = 1;
+  CleaningStatus status = 2;    // 清洗结果状态
+  string markdown_url = 3;      // 清洗后 Markdown 在 MinIO 中的路径
+  string metadata_url = 4;      // 元数据 JSON 在 MinIO 中的路径
+  QualityReport quality = 5;    // 质量报告
+  DocumentMetadata doc_meta = 6;// 文档元数据
+  string error_message = 7;     // 错误信息 (status=FAILED 时)
+  int64 processing_time_ms = 8; // 处理耗时
+}
+
+enum CleaningStatus {
+  SUCCESS = 0;
+  PARTIAL_SUCCESS = 1;          // 部分成功 (如表格解析降级但文本OK)
+  FAILED = 2;
+  REJECTED = 3;                 // 不支持的文件格式
+}
+
+message QualityReport {
+  float overall_score = 1;      // 综合质量评分 [0, 1]
+  float completeness = 2;       // 文本完整性
+  float purity = 3;             // 纯净度
+  float structure = 4;          // 结构化程度
+  float coherence = 5;          // 语义连贯性
+  repeated QualityIssue issues = 6;
+}
+
+message QualityIssue {
+  string dimension = 1;         // 问题维度
+  string level = 2;             // WARNING / ERROR
+  string description = 3;       // 问题描述
+  string location = 4;          // 问题位置 (页码/段落号)
+}
+
+message DocumentMetadata {
+  string title = 1;
+  string author = 2;
+  string created_at = 3;        // ISO 8601
+  int32 page_count = 4;
+  int32 word_count = 5;
+  string language = 6;
+  repeated ElementStat elements = 7;
+}
+
+message ElementStat {
+  string element_type = 1;      // table / image / formula / text
+  int32 count = 2;
+}
+
+// ─── 任务状态查询 ─────────────────────────────────────────
+
+message TaskStatusRequest {
+  string task_id = 1;
+}
+
+message TaskStatusResponse {
+  string task_id = 1;
+  string status = 2;            // PENDING / PROCESSING / SUCCESS / FAILED / RETRYING
+  string current_stage = 3;     // 当前处理阶段
+  int32 progress_percent = 4;   // 进度百分比
+  string created_at = 5;
+  string updated_at = 6;
+  string error_message = 7;
+}
+
+// ─── 健康检查 ─────────────────────────────────────────────
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  bool healthy = 1;
+  string version = 2;
+  map<string, bool> components = 3;  // minio / redis / kafka / llm
+}
