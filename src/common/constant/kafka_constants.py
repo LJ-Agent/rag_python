@@ -15,6 +15,11 @@ class KafkaTopics:
     TASK_COMPLETE = "rag-task-complete"
     TASK_FAILED = "rag-task-failed"
 
+    # RAG-CLEANING service topics
+    CLEANING_TASK_SUBMIT = "rag-cleaning-task-submit"
+    CLEANING_COMPLETE = "rag-cleaning-complete"
+    CLEANING_FAILED = "rag-cleaning-failed"
+
     # Consumer group
     CONSUMER_GROUP = "rag-python-group"
 

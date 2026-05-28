@@ -4,6 +4,11 @@
 server:
   host: "0.0.0.0"
 
+# 文档清洗服务 (RAG-CLEANING)
+cleaning:
+  grpc_endpoint: "${CLEANING_GRPC_ENDPOINT:localhost:50056}"
+  enabled: true  # 启用独立清洗服务，false 时回退到内置解析器
+
 # gRPC 服务端口 (对齐 Java GrpcConfig)
 grpc:
   retrieval:
