@@ -54,10 +54,12 @@ class HybridRetrieval:
 
             result = fused[:top_k]
 
+            sample_scores = [f"{r.get('score',0):.3f}" for r in result[:3]]
             logger.info(
                 f"Hybrid retrieval: query='{query[:50]}...', "
                 f"kb_ids={kb_ids}, vector={len(vector_results)}, "
-                f"bm25={len(bm25_results)}, fused={len(result)}"
+                f"bm25={len(bm25_results)}, fused={len(result)}, "
+                f"top_scores={sample_scores}"
             )
             return result
         except Exception as e:
