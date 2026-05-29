@@ -49,11 +49,8 @@ class HybridRetrieval:
             # 2. BM25 keyword retrieval
             bm25_results = self._bm25.search(query, top_k=top_k * 2)
 
-            # 3. Weighted fusion (RRF: Reciprocal Rank Fusion)
+            # 3. Weighted fusion (RRF: Reciprocal Rank Fusion), results already sorted by RRF
             fused = self._fuse_results(vector_results, bm25_results)
-
-            # 4. Sort by fused RRF score (not absolute relevance, so no threshold)
-            fused.sort(key=lambda x: x["score"], reverse=True)
 
             result = fused[:top_k]
 
