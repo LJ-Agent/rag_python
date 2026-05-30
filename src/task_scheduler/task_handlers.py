@@ -62,12 +62,34 @@ def _clean_via_service(context: TaskContext, original_url: str, file_name: str) 
 
     cleaned_path = response.markdown_url
     content_length = 0
+    content = b""
     # Try to read the cleaned content to get length
     try:
         content = _minio.get_object(cleaned_path)
         content_length = len(content)
     except Exception:
         pass
+
+    # Safety net: If cleaning service produced too little text (e.g. image-only PDF),
+    # fall back to OCR to extract text from the original file
+    MIN_VIABLE_CONTENT = 50  # Minimum chars needed for meaningful chunking
+    if content_length < MIN_VIABLE_CONTENT:
+        ext = get_file_extension(file_name)
+        is_image_like = ext in ("pdf", "png", "jpg", "jpeg", "bmp", "tiff", "tif")
+        if is_image_like:
+            logger.info(
+                f"Cleaning service returned only {content_length} chars for {file_name}. "
+                f"Attempting OCR fallback for image-based document."
+            )
+            try:
+                ocr_text = _ocr_fallback_direct(original_url, file_name)
+                if ocr_text and len(ocr_text) > content_length:
+                    # Overwrite cleaned path with OCR result
+                    _minio.put_object(cleaned_path, ocr_text.encode("utf-8"), "text/markdown")
+                    content_length = len(ocr_text)
+                    logger.info(f"OCR fallback succeeded: {content_length} chars extracted")
+            except Exception as e:
+                logger.warning(f"OCR fallback also failed: {e}")
 
     logger.info(
         f"File process done (via cleaning service): {file_name} -> {cleaned_path}, "
@@ -156,6 +178,66 @@ def _image_to_bytes(img) -> bytes:
     buf = BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
+
+
+def _ocr_fallback_direct(original_url: str, file_name: str) -> str:
+    """Direct OCR fallback — downloads original file from MinIO and runs OCR on it.
+
+    Used when the cleaning service produces too little text (e.g. pure-image PDFs).
+    Supports PDF (via pdf2image) and image formats (png/jpg/bmp/tiff).
+    """
+    ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+    file_data = _minio.get_object(original_url)
+
+    images = []
+    if ext == "pdf":
+        try:
+            from pdf2image import convert_from_bytes
+            images = convert_from_bytes(file_data, dpi=200, fmt="png")
+            logger.info(f"OCR fallback: PDF converted to {len(images)} page images")
+        except ImportError:
+            raise TaskException("pdf2image not available for OCR fallback")
+    elif ext in ("png", "jpg", "jpeg", "bmp", "tiff", "tif"):
+        images = [file_data]
+    else:
+        return ""  # Not an image-based format, skip OCR
+
+    if not images:
+        return ""
+
+    texts = []
+    for i, img in enumerate(images):
+        page_text = ""
+        try:
+            import pytesseract
+            from PIL import Image
+            from io import BytesIO
+            img_data = img if isinstance(img, bytes) else _image_to_bytes(img)
+            pil_img = Image.open(BytesIO(img_data)).convert("L")
+            page_text = pytesseract.image_to_string(pil_img, lang="chi_sim+eng")
+        except ImportError:
+            # Try easyocr as fallback
+            try:
+                import easyocr
+                import numpy as np
+                from PIL import Image
+                from io import BytesIO
+                img_data = img if isinstance(img, bytes) else _image_to_bytes(img)
+                reader_local = easyocr.Reader(["ch_sim", "en"], gpu=False)
+                pil_img = Image.open(BytesIO(img_data))
+                arr = np.array(pil_img)
+                results = reader_local.readtext(arr)
+                page_text = "\n".join(r[1] for r in results)
+            except Exception:
+                continue
+
+        if page_text.strip():
+            texts.append(page_text.strip())
+
+    result = "\n\n".join(texts)
+    if result.strip():
+        logger.info(f"OCR fallback extracted {len(result)} chars from {len(images)} pages")
+    return result
 
 
 def handle_file_process(context: TaskContext) -> dict:
