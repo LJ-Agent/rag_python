@@ -215,8 +215,10 @@ def _ocr_fallback_direct(original_url: str, file_name: str) -> str:
             img_data = img if isinstance(img, bytes) else _image_to_bytes(img)
             pil_img = Image.open(BytesIO(img_data)).convert("L")
             page_text = pytesseract.image_to_string(pil_img, lang="chi_sim+eng")
-        except ImportError:
-            # Try easyocr as fallback
+        except Exception:
+            page_text = ""
+        # Fallback: EasyOCR if pytesseract produced nothing
+        if not page_text.strip():
             try:
                 import easyocr
                 import numpy as np
