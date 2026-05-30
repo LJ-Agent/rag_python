@@ -46,15 +46,24 @@ class DocumentParser:
             raise AIComputeException("PDF extraction produced no text (possibly scanned image)")
         return "\n\n".join(texts)
 
-    def _parse_md(self, data: bytes) -> str:
+    def _decode_text(self, data: bytes, label: str) -> str:
+        """Try multiple encodings to decode file bytes, avoiding mojibake."""
+        for encoding in ["utf-8", "gbk", "gb2312", "latin-1"]:
+            try:
+                text = data.decode(encoding)
+                logger.debug(f"{label}: decoded as {encoding}")
+                return text
+            except (UnicodeDecodeError, LookupError):
+                continue
+        # Last resort: UTF-8 with replacement
+        logger.warning(f"{label}: all encodings failed, using utf-8 with replace")
         return data.decode("utf-8", errors="replace")
 
+    def _parse_md(self, data: bytes) -> str:
+        return self._decode_text(data, "MD")
+
     def _parse_txt(self, data: bytes) -> str:
-        # Try UTF-8 first, fall back to GBK
-        try:
-            return data.decode("utf-8")
-        except UnicodeDecodeError:
-            return data.decode("gbk", errors="replace")
+        return self._decode_text(data, "TXT")
 
     def _parse_docx(self, data: bytes) -> str:
         from docx import Document
