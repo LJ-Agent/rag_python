@@ -86,9 +86,18 @@ def _clean_via_service(context: TaskContext, original_url: str, file_name: str) 
 
 
 def _clean_via_builtin(context: TaskContext, original_url: str, file_name: str) -> dict:
-    """Use built-in DocumentParser (legacy fallback)."""
+    """Use built-in DocumentParser (legacy fallback). Falls back to OCR for scanned PDFs."""
     file_data = _minio.get_object(original_url)
-    cleaned_text = _parser.parse(file_data, file_name)
+    try:
+        cleaned_text = _parser.parse(file_data, file_name)
+    except Exception as e:
+        err_msg = str(e)
+        if "no text" in err_msg.lower() or "scanned" in err_msg.lower():
+            logger.info(f"Built-in parser found no text, attempting OCR fallback for {file_name}")
+            cleaned_text = _ocr_fallback(file_data, file_name)
+        else:
+            raise
+
     cleaned_path = original_url.rsplit(".", 1)[0] + "_cleaned.md"
     _minio.put_object(cleaned_path, cleaned_text.encode("utf-8"), "text/markdown")
     logger.info(f"File process done (built-in): {file_name} -> {cleaned_path}, {len(cleaned_text)} chars")
@@ -97,6 +106,72 @@ def _clean_via_builtin(context: TaskContext, original_url: str, file_name: str) 
         "contentLength": len(cleaned_text),
         "fileName": file_name,
     }
+
+
+def _ocr_fallback(file_data: bytes, file_name: str) -> str:
+    """Fallback OCR for scanned/image PDFs using pdf2image + pytesseract/easyocr."""
+    ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+    images = []
+
+    if ext == "pdf":
+        try:
+            from pdf2image import convert_from_bytes
+            images = convert_from_bytes(file_data, dpi=200, fmt="png")
+            logger.info(f"PDF converted to {len(images)} images for OCR")
+        except ImportError:
+            raise AIComputeException("pdf2image not available for OCR fallback")
+    elif ext in ("png", "jpg", "jpeg", "bmp", "tiff", "tif"):
+        images = [file_data]
+    else:
+        raise AIComputeException(f"OCR fallback not supported for .{ext} files")
+
+    if not images:
+        raise AIComputeException("OCR fallback produced no images")
+
+    texts = []
+    for i, img in enumerate(images):
+        page_text = ""
+        # Try EasyOCR first (pure Python, no system deps)
+        try:
+            import easyocr
+            import numpy as np
+            from PIL import Image
+            from io import BytesIO
+            reader = easyocr.Reader(["ch_sim", "en"], gpu=False)
+            img_data = img if isinstance(img, bytes) else _image_to_bytes(img)
+            pil_img = Image.open(BytesIO(img_data))
+            arr = np.array(pil_img)
+            results = reader.readtext(arr)
+            page_text = "\n".join(r[1] for r in results)
+        except ImportError:
+            pass
+
+        if not page_text:
+            try:
+                import pytesseract
+                from PIL import Image
+                from io import BytesIO
+                img_data = img if isinstance(img, bytes) else _image_to_bytes(img)
+                pil_img = Image.open(BytesIO(img_data)).convert("L")
+                page_text = pytesseract.image_to_string(pil_img, lang="chi_sim+eng")
+            except ImportError:
+                pass
+
+        if page_text.strip():
+            texts.append(page_text.strip())
+
+    result = "\n\n".join(texts)
+    if not result.strip():
+        raise AIComputeException("OCR fallback produced no text — document may be blank or unsupported")
+    logger.info(f"OCR extracted {len(result)} chars from {len(images)} pages")
+    return result
+
+
+def _image_to_bytes(img) -> bytes:
+    from io import BytesIO
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
 
 
 def handle_file_process(context: TaskContext) -> dict:
