@@ -20,6 +20,7 @@ COPY pyproject.toml .
 
 # Install PyTorch CPU first (from PyTorch wheel index)
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir torchvision --index-url https://download.pytorch.org/whl/cpu
 
 # Install remaining Python dependencies
 RUN pip install --no-cache-dir .
