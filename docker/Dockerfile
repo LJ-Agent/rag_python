@@ -8,6 +8,7 @@ WORKDIR /app
 # System dependencies for pypdf / sentence-transformers / PyTorch
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ libgomp1 \
+    tesseract-ocr tesseract-ocr-chi-sim poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy source code and config first (needed for setuptools package discovery)

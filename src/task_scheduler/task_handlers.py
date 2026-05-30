@@ -131,31 +131,15 @@ def _ocr_fallback(file_data: bytes, file_name: str) -> str:
     texts = []
     for i, img in enumerate(images):
         page_text = ""
-        # Try EasyOCR first (pure Python, no system deps)
         try:
-            import easyocr
-            import numpy as np
+            import pytesseract
             from PIL import Image
             from io import BytesIO
-            reader = easyocr.Reader(["ch_sim", "en"], gpu=False)
             img_data = img if isinstance(img, bytes) else _image_to_bytes(img)
-            pil_img = Image.open(BytesIO(img_data))
-            arr = np.array(pil_img)
-            results = reader.readtext(arr)
-            page_text = "\n".join(r[1] for r in results)
+            pil_img = Image.open(BytesIO(img_data)).convert("L")
+            page_text = pytesseract.image_to_string(pil_img, lang="chi_sim+eng")
         except ImportError:
-            pass
-
-        if not page_text:
-            try:
-                import pytesseract
-                from PIL import Image
-                from io import BytesIO
-                img_data = img if isinstance(img, bytes) else _image_to_bytes(img)
-                pil_img = Image.open(BytesIO(img_data)).convert("L")
-                page_text = pytesseract.image_to_string(pil_img, lang="chi_sim+eng")
-            except ImportError:
-                pass
+            raise AIComputeException("pytesseract not available for OCR — check Tesseract installation")
 
         if page_text.strip():
             texts.append(page_text.strip())
