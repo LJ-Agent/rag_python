@@ -114,7 +114,7 @@ def _clean_via_builtin(context: TaskContext, original_url: str, file_name: str) 
         cleaned_text = _parser.parse(file_data, file_name)
     except Exception as e:
         err_msg = str(e)
-        if "no text" in err_msg.lower() or "scanned" in err_msg.lower():
+        if any(kw in err_msg.lower() for kw in ("no text", "scanned", "unsupported", "ocr")):
             logger.info(f"Built-in parser found no text, attempting OCR fallback for {file_name}")
             cleaned_text = _ocr_fallback(file_data, file_name)
         else:

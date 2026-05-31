@@ -10,7 +10,8 @@ from common.util.utils import clean_text, get_file_extension
 
 logger = get_logger()
 
-SUPPORTED_EXTENSIONS = {"pdf", "md", "txt", "docx"}
+SUPPORTED_EXTENSIONS = {"pdf", "md", "txt", "docx", "png", "jpg", "jpeg", "bmp", "tiff", "tif"}
+IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "bmp", "tiff", "tif"}
 
 
 class DocumentParser:
@@ -21,6 +22,14 @@ class DocumentParser:
         ext = get_file_extension(filename)
         if ext not in SUPPORTED_EXTENSIONS:
             raise AIComputeException(f"Unsupported file type: {ext}")
+
+        # Image formats → use OCR directly
+        if ext in IMAGE_EXTENSIONS:
+            try:
+                raw_text = self._parse_image_ocr(file_data, ext)
+                return self._clean_to_markdown(raw_text, ext)
+            except Exception as e:
+                raise AIComputeException(f"Image OCR parse failed: {filename} — {e}")
 
         parser_method = {
             "pdf": self._parse_pdf,
@@ -71,6 +80,39 @@ class DocumentParser:
         doc = Document(io.BytesIO(data))
         paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
         return "\n\n".join(paragraphs)
+
+    def _parse_image_ocr(self, data: bytes, ext: str) -> str:
+        """Parse image files via OCR (pytesseract or easyocr fallback)."""
+        from io import BytesIO
+        text = ""
+        # Try Tesseract first
+        try:
+            import pytesseract
+            from PIL import Image
+            img = Image.open(BytesIO(data))
+            if img.mode != "L":
+                img = img.convert("L")
+            text = pytesseract.image_to_string(img, lang="chi_sim+eng")
+            if text.strip():
+                return text.strip()
+        except Exception:
+            pass
+        # Fallback: EasyOCR
+        try:
+            import easyocr
+            import numpy as np
+            from PIL import Image
+            reader = easyocr.Reader(["ch_sim", "en"], gpu=False)
+            img = Image.open(BytesIO(data))
+            arr = np.array(img)
+            results = reader.readtext(arr)
+            text = "\n".join(r[1] for r in results)
+            return text.strip()
+        except Exception:
+            pass
+        if not text.strip():
+            raise AIComputeException("OCR produced no text for image")
+        return text
 
     def _clean_to_markdown(self, text: str, source_format: str) -> str:
         """Normalize text to clean Markdown format."""
