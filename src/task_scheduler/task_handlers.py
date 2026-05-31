@@ -70,6 +70,15 @@ def _clean_via_service(context: TaskContext, original_url: str, file_name: str) 
     except Exception:
         pass
 
+    # Mirror to _cleaned.md convention expected by Java backend's buildCleanedPath()
+    legacy_cleaned_path = original_url.rsplit(".", 1)[0] + "_cleaned.md"
+    if cleaned_path != legacy_cleaned_path and content_length > 0:
+        try:
+            _minio.put_object(legacy_cleaned_path, content, "text/markdown; charset=utf-8")
+            logger.info(f"Mirrored cleaned MD to legacy path: {legacy_cleaned_path}")
+        except Exception as e:
+            logger.warning(f"Failed to mirror cleaned MD: {e}")
+
     # Safety net: If cleaning service produced too little text (e.g. image-only PDF),
     # fall back to OCR to extract text from the original file
     MIN_VIABLE_CONTENT = 50  # Minimum chars needed for meaningful chunking
