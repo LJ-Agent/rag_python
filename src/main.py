@@ -49,6 +49,14 @@ def main():
     consumer = TaskKafkaConsumer()
     consumer.start()
 
+    # 注册到 Nacos 服务发现
+    try:
+        from common.nacos_registry import register_service
+        register_service("rag-python-service", 50051, {"type": "retrieval"})
+        register_service("rag-python-generation", 50052, {"type": "generation"})
+    except Exception as e:
+        logger.warning(f"Nacos registration skipped: {e}")
+
     logger.info("All services started successfully")
 
     # Graceful shutdown handler
