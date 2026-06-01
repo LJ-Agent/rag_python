@@ -1,6 +1,7 @@
 """Nacos service registration for Python microservices.
 Called at startup to register the service with Nacos.
 """
+import json
 import logging
 import os
 import socket
@@ -27,7 +28,7 @@ def register_service(service_name: str, port: int, metadata: dict | None = None)
         "groupName": NACOS_GROUP,
         "enable": True,
         "healthy": True,
-        "metadata": (metadata or {}).__str__(),
+        "metadata": json.dumps(metadata or {}),
     }
     
     url = f"http://{NACOS_HOST}:{NACOS_PORT}/nacos/v1/ns/instance"
